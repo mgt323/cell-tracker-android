@@ -1,0 +1,59 @@
+---
+description: Rules for TelephonyManager usage, permissions, callbacks, and carrier aggregation mapping
+alwaysApply: true
+---
+
+# Android Telephony Rules
+
+## Runtime Permissions
+
+- Every call into `TelephonyManager` (or any API that reads cellular/radio
+  state) MUST be preceded by a runtime check that both of the following
+  permissions are granted:
+  - `ACCESS_FINE_LOCATION`
+  - `READ_PHONE_STATE`
+- On Android 10 (API 29) and above, cell info and signal strength APIs
+  require `ACCESS_FINE_LOCATION` in addition to `READ_PHONE_STATE`. Do not
+  assume `READ_PHONE_STATE` alone is sufficient.
+- Never guard a `TelephonyManager` call with only a manifest declaration.
+  Manifest entries are necessary but not sufficient — always verify via
+  `ContextCompat.checkSelfPermission(...) == PackageManager.PERMISSION_GRANTED`
+  (or the project's permission-checking utility) immediately before the call.
+- If permissions are missing, fail gracefully (return empty/default state,
+  log, or trigger a permission request) rather than letting the call throw
+  a `SecurityException`.
+
+## TelephonyCallback, not PhoneStateListener
+
+- All code that observes cellular data (signal strength, service state,
+  data connection state, physical channel config, etc.) MUST use
+  `TelephonyCallback` via `TelephonyManager.registerTelephonyCallback(...)`.
+- `PhoneStateListener` is deprecated (API 31+) and MUST NOT be used in new
+  or modified code. If you find `PhoneStateListener` usage, migrate it to
+  the equivalent `TelephonyCallback` listener interface
+  (e.g. `TelephonyCallback.PhysicalChannelConfigListener`,
+  `TelephonyCallback.SignalStrengthsListener`, etc.).
+- Always unregister callbacks (`unregisterTelephonyCallback`) when the
+  owning component is destroyed/stopped to avoid leaks.
+
+## PhysicalChannelConfig and Carrier Aggregation
+
+- Carrier aggregation MUST be detected via `PhysicalChannelConfig` data
+  delivered through `TelephonyCallback.PhysicalChannelConfigListener`
+  (i.e. `onPhysicalChannelConfigChanged(List<PhysicalChannelConfig>)`).
+- Carrier aggregation is active when more than one `PhysicalChannelConfig`
+  entry is present for the connected cell.
+- Raw `PhysicalChannelConfig` data MUST be mapped into the domain model
+  `CarrierAggregationState` before it is exposed outside the data layer.
+  Do not let `PhysicalChannelConfig` (an Android framework type) leak into
+  `domain/` or `ui/` layers.
+
+## Package Conventions
+
+- `data/telephony` — TelephonyManager/TelephonyCallback wrappers, permission
+  checks, and mapping from Android framework types (e.g.
+  `PhysicalChannelConfig`) into domain models.
+- `domain/model` — plain Kotlin domain models such as
+  `CarrierAggregationState`, decoupled from Android telephony APIs.
+- `ui/screens` — Compose screens/state that consume domain models only,
+  never framework telephony types directly.

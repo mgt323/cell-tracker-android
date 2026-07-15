@@ -1,0 +1,28 @@
+---
+description: Project tech stack — locked in, do not change without explicit request
+alwaysApply: true
+---
+
+# Tech Stack
+
+This project's tech stack (do not change without explicit request):
+
+- Kotlin, Jetpack Compose, Material3
+- DI: Hilt
+- Database: Room
+- Async: Kotlin Coroutines + Flow (not RxJava, not callbacks)
+- Telephony: `TelephonyCallback` (API 31+), `PhysicalChannelConfig`
+- Background processing: WorkManager + foreground service (type "location")
+- Testing: JUnit5 + MockK + Turbine (for Flow)
+- minSdk 29, targetSdk latest stable
+- Map: osmdroid
+
+## Rules
+
+- Do not suggest alternative libraries (e.g. RxJava, LiveData, Dagger2,
+  SQLite directly, Google Maps, PhoneStateListener) or migrate existing code
+  to other patterns without asking first.
+- If a task seems to require a library or pattern outside this list, stop
+  and ask the user before introducing it.
+- New async code must use Coroutines/Flow, never callbacks or RxJava.
+- New tests must use JUnit5 + MockK; test Flow emissions with Turbine.

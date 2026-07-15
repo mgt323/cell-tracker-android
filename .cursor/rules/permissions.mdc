@@ -1,0 +1,34 @@
+---
+description: Runtime permission handling for telephony APIs — checks, graceful denial, and UI fallback
+alwaysApply: true
+---
+
+# Permissions
+
+## Mandatory Runtime Checks
+
+- Every single call to `TelephonyManager`, `TelephonyCallback`, or any
+  `CellInfo` API MUST be preceded by a strict runtime permission check for
+  BOTH `ACCESS_FINE_LOCATION` and `READ_PHONE_STATE`.
+- Check both permissions explicitly (e.g.
+  `ContextCompat.checkSelfPermission(...) == PackageManager.PERMISSION_GRANTED`
+  for each) immediately before the call site — do not assume a manifest
+  declaration or an earlier check elsewhere is sufficient.
+
+## No Crashes on Denial
+
+- Permission denial MUST NOT cause a crash (no uncaught `SecurityException`).
+- On denial, the data/telephony layer must emit an explicit empty or error
+  state upward — never `null`, an exception, or silent no-op.
+- The ViewModel must surface this as an explicit state, e.g.
+  `PermissionsRequiredState`, as part of its `StateFlow`/UI state — not as a
+  side effect, log line, or toast alone.
+
+## UI Fallback
+
+- The Compose UI must observe this state and, when active, render a
+  fallback "Permissions Required" screen with a rationale explaining why
+  `ACCESS_FINE_LOCATION` and `READ_PHONE_STATE` are needed, instead of the
+  main dashboard.
+- The main dashboard/content Composable must never be rendered while
+  permissions are missing.

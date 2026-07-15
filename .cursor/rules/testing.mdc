@@ -1,0 +1,41 @@
+---
+description: Unit test naming convention, mapper test coverage, and testing stack
+alwaysApply: true
+---
+
+# Testing
+
+## Naming Convention
+
+- Unit test method names MUST follow:
+  `[methodName]_[stateUnderTest]_[expectedBehavior]`
+- Example: `mapCellInfoNr_withValidPci_returnsCorrectDomainModel`.
+
+## Mapper Coverage
+
+- Every mapper that converts a raw Android framework class (`CellInfoLte`,
+  `CellInfoNr`, `PhysicalChannelConfig`, etc.) into an internal domain model
+  MUST have isolated unit tests. This is not optional.
+- Tests must construct/mock the framework input directly — never depend on
+  a real device or emulator radio state.
+
+## Testing Stack
+
+- JUnit5 (Jupiter) for test execution, run via the `de.mannodermaus.android-junit`
+  Gradle plugin (2.0.1+; the project behind it is now named
+  `android-junit-framework` — it was previously published as
+  `de.mannodermaus.android-junit5`/`android-junit5`, so don't search for that
+  old name).
+- This plugin supports both JUnit 5 and JUnit 6, but JUnit 6 requires API 35+
+  on the device. Stick with JUnit 5 (Jupiter) until minSdk is raised above 29
+  — do not adopt JUnit 6 before then.
+- MockK for mocking framework dependencies (`CellInfo` subtypes,
+  `TelephonyManager`, `PhysicalChannelConfig`, etc.).
+- Turbine for testing Flow emissions (not `kotlinx-coroutines-test`).
+
+## Modem Edge Cases
+
+- Tests must cover modem edge cases, including sentinel/unavailable values
+  such as `Int.MAX_VALUE` returned for a radio parameter (e.g. RSRP,
+  EARFCN) when the value is unavailable — assert these map to `null` (or the
+  documented "unknown" representation), not the raw sentinel.
