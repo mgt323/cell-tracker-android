@@ -6,6 +6,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.ferhatozcelik.jetpackcomposetemplate.ui.currentconnection.CurrentConnectionScreen
 import com.ferhatozcelik.jetpackcomposetemplate.ui.detail.DetailScreen
 import com.ferhatozcelik.jetpackcomposetemplate.ui.home.MainScreen
 
@@ -13,7 +14,7 @@ import com.ferhatozcelik.jetpackcomposetemplate.ui.home.MainScreen
 fun NavGraph(navController: NavHostController) {
 
     NavHost(
-        navController = navController, startDestination = Screen.Main.route
+        navController = navController, startDestination = Screen.CurrentConnection.route
     ) {
 
         composable(Screen.Main.route) {
@@ -24,6 +25,9 @@ fun NavGraph(navController: NavHostController) {
             arguments = listOf(navArgument("id") { type = NavType.IntType })
         ) {
             DetailScreen(navController = navController, id = it.arguments?.getInt("id") ?: 0)
+        }
+        composable(Screen.CurrentConnection.route) {
+            CurrentConnectionScreen()
         }
     }
 }
