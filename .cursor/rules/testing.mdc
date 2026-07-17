@@ -21,14 +21,20 @@ alwaysApply: true
 
 ## Testing Stack
 
-- JUnit5 (Jupiter) for test execution, run via the `de.mannodermaus.android-junit`
-  Gradle plugin (2.0.1+; the project behind it is now named
-  `android-junit-framework` — it was previously published as
-  `de.mannodermaus.android-junit5`/`android-junit5`, so don't search for that
-  old name).
-- This plugin supports both JUnit 5 and JUnit 6, but JUnit 6 requires API 35+
-  on the device. Stick with JUnit 5 (Jupiter) until minSdk is raised above 29
-  — do not adopt JUnit 6 before then.
+- JUnit5 (Jupiter) for test execution, run via the `de.mannodermaus.android-junit5`
+  Gradle plugin, **pinned to `1.10.2.0`**. This is a deliberate downgrade from
+  the plugin's current `de.mannodermaus.android-junit` / `android-junit-framework`
+  line (2.0.0+): every release from 2.0.0 onward bundles an instrumentation
+  artifact (`android-test-core`) requiring Kotlin 2.1+ (2.3 by 2.0.1), which is
+  incompatible with this project's pinned Kotlin 1.9.24 toolchain (see
+  tech-stack.mdc). Plugin `1.10.2.0` is the last release whose bundled
+  instrumentation artifacts (`1.5.0`) were built against Kotlin 1.9.23.
+- Do not bump this plugin past the `1.x` (`android-junit5`) line — and do not
+  rename it back to `de.mannodermaus.android-junit` — until the project's
+  Kotlin version is deliberately raised to 2.1+ as well. JUnit 6 support does
+  not exist in this plugin line at all (it was introduced alongside the
+  Kotlin 2.1+ jump in 2.0.0), so this project stays on JUnit 5 (Jupiter) by
+  necessity, not just by minSdk policy.
 - MockK for mocking framework dependencies (`CellInfo` subtypes,
   `TelephonyManager`, `PhysicalChannelConfig`, etc.).
 - Turbine for testing Flow emissions (not `kotlinx-coroutines-test`).

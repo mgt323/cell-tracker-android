@@ -41,7 +41,9 @@ without asking first — see `.cursor/rules/tech-stack.mdc`.
 ## Step 3: Map to RadioMastEntity
 
 Follow the existing Room conventions (`data/entity`, `data/dao`,
-`data/repository` — see `ExampleEntity`/`ExampleDao`/`ExampleRepository`).
+`data/repository` — see `ExampleRepository` and `AppDatabase` for the
+current wiring pattern; the original `ExampleEntity`/`ExampleDao` template
+files have been removed).
 
 - If `RadioMastEntity` does not exist yet, create it in `data/entity` with a
   unique/indexed `stationId` column (`@Entity(tableName = "radio_mast_table")`,

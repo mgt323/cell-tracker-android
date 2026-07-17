@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.com.google.dagger.hilt.android)
     alias(libs.plugins.com.google.devtools.ksp)
-    alias(libs.plugins.org.jetbrains.kotlin.plugin.compose)
     alias(libs.plugins.de.mannodermaus.android.junit)
     id('kotlin-parcelize')
     // id("com.google.gms.google-services") // Google Play Services
@@ -37,20 +36,27 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '1.8'
     }
     buildFeatures {
         compose true
     }
-    packaging {
+    composeOptions {
+        kotlinCompilerExtensionVersion libs.versions.compose.compiler.get()
+    }
+    packagingOptions {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {
@@ -76,7 +82,8 @@ dependencies {
     debugImplementation(libs.ui.tooling)
     debugImplementation(libs.ui.test.manifest)
 
-    // JUnit5 (Jupiter) - local unit tests, run via the de.mannodermaus.android-junit plugin
+    // JUnit5 (Jupiter) - local unit tests, run via the de.mannodermaus.android-junit5 plugin
+    // (pinned to 1.10.2.0 for Kotlin 1.9.24 compatibility; see testing.mdc)
     testImplementation(platform(libs.junit.jupiter.bom))
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.junit.jupiter.params)

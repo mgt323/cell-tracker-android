@@ -14,7 +14,7 @@ This project's tech stack (do not change without explicit request):
 - Telephony: `TelephonyCallback` (API 31+), `PhysicalChannelConfig`
 - Background processing: WorkManager + foreground service (type "location")
 - Testing: JUnit5 + MockK + Turbine (for Flow)
-- minSdk 29, targetSdk latest stable
+- minSdk 29, compileSdk 35, targetSdk 35
 - Map: osmdroid
 
 ## Rules
@@ -26,3 +26,5 @@ This project's tech stack (do not change without explicit request):
   and ask the user before introducing it.
 - New async code must use Coroutines/Flow, never callbacks or RxJava.
 - New tests must use JUnit5 + MockK; test Flow emissions with Turbine.
+- `compileSdk` and `targetSdk` must always be set to the same value (35) —
+  never let them diverge, to prevent build ambiguities.
