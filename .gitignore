@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration file (contains SDK path, etc.), never shared
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Native / CMake build output
+*.so
+
+# Keystores and signing secrets — never commit real signing material
+*.jks
+*.keystore
+keystore.properties
+
+# Log/OS files
+*.log
+.DS_Store
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Local unit/instrumented test reports
+/captures/
+.externalNativeBuild
+output.json
