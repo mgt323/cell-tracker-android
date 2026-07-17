@@ -1,6 +1,8 @@
 package com.ferhatozcelik.jetpackcomposetemplate.data.telephony
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.CellInfo
 import android.telephony.PhysicalChannelConfig
@@ -8,210 +10,149 @@ import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
-import com.ferhatozcelik.jetpackcomposetemplate.domain.exception.PermissionMissingException
-import com.ferhatozcelik.jetpackcomposetemplate.domain.model.CarrierAggregationState
 import com.ferhatozcelik.jetpackcomposetemplate.domain.model.CellSnapshot
+import com.ferhatozcelik.jetpackcomposetemplate.domain.model.MissingTelephonyPermissionsException
 import com.ferhatozcelik.jetpackcomposetemplate.domain.repository.TelephonyRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * [TelephonyRepository] backed by [TelephonyCallback] (never
- * `PhoneStateListener`), registered via
- * [TelephonyManager.registerTelephonyCallback].
+ * [TelephonyRepository] backed by `TelephonyCallback` (never
+ * `PhoneStateListener`, which is banned by `.cursor/rules/android-telephony.mdc`),
+ * registered via [TelephonyManager.registerTelephonyCallback]. A single
+ * callback implements both [TelephonyCallback.CellInfoListener] (serving
+ * cell identity, band, RSRP/RSRQ, via [CellInfoMapper]) and
+ * [TelephonyCallback.PhysicalChannelConfigListener] (bandwidth, carrier
+ * aggregation, via [PhysicalChannelConfigMapper]); the two are combined into
+ * a [CellSnapshot] on every callback firing.
  *
- * - On API 31+ a single callback implements both
- *   [TelephonyCallback.CellInfoListener] (serving cell identity, band,
- *   RSRP/RSRQ) and [TelephonyCallback.PhysicalChannelConfigListener]
- *   (bandwidth, carrier aggregation). An initial
- *   [TelephonyManager.requestCellInfoUpdate] seeds the first emission.
- * - On API 29–30 (`TelephonyCallback` requires API 31) the repository
- *   degrades gracefully: it polls [TelephonyManager.requestCellInfoUpdate]
- *   at a conservative interval, with no carrier-aggregation information.
+ * `TelephonyCallback` requires API 31 (`Build.VERSION_CODES.S`), while this
+ * project's `minSdk` is 29. Since `PhoneStateListener` cannot be used as a
+ * fallback, telephony observation is simply unsupported below API 31: the
+ * returned [Flow] closes with [MissingTelephonyPermissionsException] on
+ * those devices — the same signal used for an actual permission denial,
+ * per that exception's documented contract.
  *
  * Both `ACCESS_FINE_LOCATION` and `READ_PHONE_STATE` are checked immediately
- * before every telephony call site; a missing permission closes the Flow with
- * a typed [PermissionMissingException] (never an uncaught
- * [SecurityException]), so upstream layers can map it to an explicit
- * permissions-required state.
+ * before every telephony call site via [ContextCompat.checkSelfPermission],
+ * per `.cursor/rules/permissions.mdc` and `.cursor/rules/android-telephony.mdc`
+ * — never assumed from a manifest declaration alone. A missing permission
+ * (initially, or revoked mid-collection) closes the flow with
+ * [MissingTelephonyPermissionsException] instead of throwing an uncaught
+ * `SecurityException`.
  */
 @Singleton
 class TelephonyRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val telephonyManager: TelephonyManager,
-    private val permissionChecker: TelephonyPermissionChecker
+    @ApplicationContext private val context: Context
 ) : TelephonyRepository {
 
-    private val cellInfoMapper = CellInfoMapper()
-
     override fun observeCurrentCell(): Flow<CellSnapshot> = callbackFlow {
-        val missingAtStart = permissionChecker.missingPermissions()
-        if (missingAtStart.isNotEmpty()) {
-            close(PermissionMissingException(missingAtStart))
-            awaitClose { }
-            return@callbackFlow
-        }
+        val permissionsGranted = hasRequiredPermissions()
+        val apiSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-        // Callbacks are all dispatched on the main executor, so the mutable
-        // combine-state below is only touched from a single thread.
-        val executor = ContextCompat.getMainExecutor(context)
-        val state = CombineState()
-
-        val telephonyCallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            registerCallbackOrNull(executor, state)
+        val telephonyManager = if (permissionsGranted && apiSupported) {
+            context.getSystemService(TelephonyManager::class.java)
         } else {
             null
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // The registered CellInfoListener only fires on changes; request
-            // one update up front so collectors get a prompt first emission.
-            requestCellInfoUpdateSafely(executor, state)
-        } else {
-            // No TelephonyCallback below API 31 (and PhoneStateListener is
-            // forbidden) — fall back to conservative polling.
-            launch {
-                while (isActive) {
-                    requestCellInfoUpdateSafely(executor, state)
-                    delay(FALLBACK_POLL_INTERVAL_MS)
-                }
+        val registeredCallback = when {
+            !permissionsGranted -> {
+                close(MissingTelephonyPermissionsException())
+                null
             }
+            !apiSupported -> {
+                // TelephonyCallback requires API 31+; PhoneStateListener is
+                // banned (`.cursor/rules/android-telephony.mdc`), so there is
+                // no supported way to observe cellular state below API 31 in
+                // this project.
+                close(MissingTelephonyPermissionsException())
+                null
+            }
+            telephonyManager == null -> {
+                close(MissingTelephonyPermissionsException())
+                null
+            }
+            else -> registerCallbackOrNull(telephonyManager)
         }
 
         awaitClose {
-            if (telephonyCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                telephonyManager.unregisterTelephonyCallback(telephonyCallback)
+            if (telephonyManager != null && registeredCallback != null) {
+                telephonyManager.unregisterTelephonyCallback(registeredCallback)
             }
         }
-    }.distinctUntilChanged()
+    }
 
     /**
-     * Registers the combined CellInfo + PhysicalChannelConfig callback.
-     * Returns `null` (after closing the flow with a typed exception) if
-     * permissions are missing or the framework rejects the registration.
+     * Registers the combined `CellInfo` + `PhysicalChannelConfig` callback
+     * and returns it, or `null` (after closing the flow with
+     * [MissingTelephonyPermissionsException]) if the framework rejects the
+     * registration with a [SecurityException] — e.g. a permission revoked in
+     * a TOCTOU race between the check in [observeCurrentCell] and this call.
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private fun ProducerScope<CellSnapshot>.registerCallbackOrNull(
-        executor: Executor,
-        state: CombineState
+        telephonyManager: TelephonyManager
     ): TelephonyCallback? {
-        val physicalChannelConfigMapper = PhysicalChannelConfigMapper()
+        var latestCellInfo: List<CellInfo> = emptyList()
+        var latestConfigs: List<PhysicalChannelConfig> = emptyList()
+
+        fun publishIfPossible() {
+            val primaryCellData = CellInfoMapper.mapPrimaryCell(latestCellInfo) ?: return
+            val carrierAggregation = PhysicalChannelConfigMapper.map(latestConfigs)
+            trySend(
+                CellSnapshot(
+                    cellType = primaryCellData.cellType,
+                    band = primaryCellData.band,
+                    rsrp = primaryCellData.rsrp,
+                    rsrq = primaryCellData.rsrq,
+                    bandwidthKhz = carrierAggregation.bandwidthKhz,
+                    isCarrierAggregationActive = carrierAggregation.isCarrierAggregationActive,
+                    secondaryBands = carrierAggregation.secondaryBands
+                )
+            )
+        }
+
         val callback = object :
             TelephonyCallback(),
             TelephonyCallback.CellInfoListener,
             TelephonyCallback.PhysicalChannelConfigListener {
 
             override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                state.servingCell = cellInfoMapper.mapToServingCell(cellInfo)
-                publish(state)
+                latestCellInfo = cellInfo.toList()
+                publishIfPossible()
             }
 
             override fun onPhysicalChannelConfigChanged(configs: MutableList<PhysicalChannelConfig>) {
-                state.carrierAggregation = physicalChannelConfigMapper.mapToCarrierAggregationState(configs)
-                publish(state)
+                latestConfigs = configs.toList()
+                publishIfPossible()
             }
         }
 
-        val missing = permissionChecker.missingPermissions()
-        if (missing.isNotEmpty()) {
-            close(PermissionMissingException(missing))
-            return null
-        }
         return try {
-            telephonyManager.registerTelephonyCallback(executor, callback)
+            telephonyManager.registerTelephonyCallback(context.mainExecutor, callback)
             callback
         } catch (e: SecurityException) {
-            // Defensive: never let a SecurityException propagate uncaught.
-            close(PermissionMissingException(permissionChecker.missingPermissions(), e))
+            // Defensive: never let a SecurityException escape uncaught.
+            close(MissingTelephonyPermissionsException())
             null
         }
     }
 
-    /**
-     * One-shot cell info refresh. Checks both permissions immediately before
-     * the [TelephonyManager.requestCellInfoUpdate] call and closes the flow
-     * with a typed [PermissionMissingException] on denial (e.g. revoked
-     * mid-collection) instead of throwing.
-     */
-    private fun ProducerScope<CellSnapshot>.requestCellInfoUpdateSafely(
-        executor: Executor,
-        state: CombineState
-    ) {
-        val missing = permissionChecker.missingPermissions()
-        if (missing.isNotEmpty()) {
-            close(PermissionMissingException(missing))
-            return
-        }
-        try {
-            telephonyManager.requestCellInfoUpdate(
-                executor,
-                object : TelephonyManager.CellInfoCallback() {
-                    override fun onCellInfo(cellInfo: MutableList<CellInfo>) {
-                        state.servingCell = cellInfoMapper.mapToServingCell(cellInfo)
-                        publish(state)
-                    }
-                }
-            )
-        } catch (e: SecurityException) {
-            close(PermissionMissingException(permissionChecker.missingPermissions(), e))
-        }
-    }
-
-    /**
-     * Combines the latest serving-cell and carrier-aggregation data into a
-     * [CellSnapshot] emission. Because the domain model's fields are
-     * non-nullable, snapshots are only emitted once RSRP and RSRQ are
-     * actually available (sentinel values were already mapped to `null` by
-     * the mappers and are never passed through).
-     */
-    private fun ProducerScope<CellSnapshot>.publish(state: CombineState) {
-        val serving = state.servingCell ?: return
-        val rsrp = serving.rsrp ?: return
-        val rsrq = serving.rsrq ?: return
-        val ca = state.carrierAggregation
-        trySend(
-            CellSnapshot(
-                cellType = serving.cellType,
-                band = serving.band ?: BAND_UNKNOWN,
-                rsrp = rsrp,
-                rsrq = rsrq,
-                bandwidthKhz = ca.primaryBandwidthKhz ?: serving.bandwidthKhz ?: BANDWIDTH_UNKNOWN_KHZ,
-                isCarrierAggregationActive = ca.isActive,
-                secondaryBands = ca.secondaryBands
-            )
-        )
-    }
-
-    /** Latest values from the two listeners, combined on each callback. */
-    private class CombineState {
-        var servingCell: ServingCell? = null
-        var carrierAggregation: CarrierAggregationState = CarrierAggregationState.Inactive
-    }
-
-    private companion object {
-        /**
-         * Poll interval for the API 29–30 fallback. Deliberately conservative
-         * to limit battery impact of repeated cell info requests.
-         */
-        const val FALLBACK_POLL_INTERVAL_MS = 10_000L
-
-        /** Documented "unknown" representation for [CellSnapshot.band]. */
-        const val BAND_UNKNOWN = "unknown"
-
-        /**
-         * Documented "unknown" representation for [CellSnapshot.bandwidthKhz],
-         * forced by the field being non-nullable in the domain model.
-         */
-        const val BANDWIDTH_UNKNOWN_KHZ = 0
+    private fun hasRequiredPermissions(): Boolean {
+        val hasFineLocation = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasPhoneState = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_PHONE_STATE
+        ) == PackageManager.PERMISSION_GRANTED
+        return hasFineLocation && hasPhoneState
     }
 }

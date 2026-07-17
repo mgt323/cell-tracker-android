@@ -3,42 +3,40 @@ package com.ferhatozcelik.jetpackcomposetemplate.data.telephony
 import android.telephony.CellInfo
 import android.telephony.PhysicalChannelConfig
 import android.telephony.TelephonyManager
-import com.ferhatozcelik.jetpackcomposetemplate.domain.model.CarrierAggregationState
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class PhysicalChannelConfigMapperTest {
 
-    private val mapper = PhysicalChannelConfigMapper()
-
     @Test
-    fun mapToCarrierAggregationState_withEmptyList_returnsInactiveState() {
-        val result = mapper.mapToCarrierAggregationState(emptyList())
+    fun map_withEmptyList_returnsInactiveWithUnavailableBandwidth() {
+        val result = PhysicalChannelConfigMapper.map(emptyList())
 
-        assertEquals(CarrierAggregationState.Inactive, result)
+        assertFalse(result.isCarrierAggregationActive)
+        assertEquals(CellInfo.UNAVAILABLE, result.bandwidthKhz)
+        assertTrue(result.secondaryBands.isEmpty())
     }
 
     @Test
-    fun mapToCarrierAggregationState_withSinglePrimaryChannel_returnsInactiveWithBandwidth() {
+    fun map_withSinglePrimaryChannel_returnsInactiveWithBandwidth() {
         val primary = config(
             connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING,
             bandwidthKhz = 20_000
         )
 
-        val result = mapper.mapToCarrierAggregationState(listOf(primary))
+        val result = PhysicalChannelConfigMapper.map(listOf(primary))
 
-        assertFalse(result.isActive)
-        assertEquals(20_000, result.primaryBandwidthKhz)
+        assertFalse(result.isCarrierAggregationActive)
+        assertEquals(20_000, result.bandwidthKhz)
         assertTrue(result.secondaryBands.isEmpty())
     }
 
     @Test
-    fun mapToCarrierAggregationState_withMultipleChannels_returnsActiveWithSecondaryBands() {
+    fun map_withMultipleChannels_returnsActiveWithSecondaryBands() {
         val primary = config(
             connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING,
             bandwidthKhz = 20_000
@@ -54,26 +52,26 @@ class PhysicalChannelConfigMapperTest {
             networkType = TelephonyManager.NETWORK_TYPE_NR
         )
 
-        val result = mapper.mapToCarrierAggregationState(listOf(primary, secondaryLte, secondaryNr))
+        val result = PhysicalChannelConfigMapper.map(listOf(primary, secondaryLte, secondaryNr))
 
-        assertTrue(result.isActive)
+        assertTrue(result.isCarrierAggregationActive)
         assertEquals(listOf("B7", "n78"), result.secondaryBands)
     }
 
     @Test
-    fun mapToCarrierAggregationState_withUnknownBandwidthSentinel_mapsToNull() {
+    fun map_withUnknownBandwidthSentinel_mapsToUnavailableSentinel() {
         val primary = config(
             connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING,
             bandwidthKhz = PhysicalChannelConfig.CELL_BANDWIDTH_UNKNOWN
         )
 
-        val result = mapper.mapToCarrierAggregationState(listOf(primary))
+        val result = PhysicalChannelConfigMapper.map(listOf(primary))
 
-        assertNull(result.primaryBandwidthKhz)
+        assertEquals(CellInfo.UNAVAILABLE, result.bandwidthKhz)
     }
 
     @Test
-    fun mapToCarrierAggregationState_withUnknownSecondaryBand_omitsThatBandLabel() {
+    fun map_withUnknownSecondaryBandSentinel_omitsThatBandLabel() {
         val primary = config(
             connectionStatus = CellInfo.CONNECTION_PRIMARY_SERVING,
             bandwidthKhz = 20_000
@@ -84,14 +82,14 @@ class PhysicalChannelConfigMapperTest {
             networkType = TelephonyManager.NETWORK_TYPE_LTE
         )
 
-        val result = mapper.mapToCarrierAggregationState(listOf(primary, secondaryUnknownBand))
+        val result = PhysicalChannelConfigMapper.map(listOf(primary, secondaryUnknownBand))
 
-        assertTrue(result.isActive)
+        assertTrue(result.isCarrierAggregationActive)
         assertTrue(result.secondaryBands.isEmpty())
     }
 
     @Test
-    fun mapToCarrierAggregationState_withNoPrimaryFlaggedChannel_usesFirstEntryAsPrimary() {
+    fun map_withNoPrimaryFlaggedChannel_usesFirstEntryAsPrimary() {
         val first = config(
             connectionStatus = CellInfo.CONNECTION_SECONDARY_SERVING,
             bandwidthKhz = 10_000
@@ -102,9 +100,9 @@ class PhysicalChannelConfigMapperTest {
             networkType = TelephonyManager.NETWORK_TYPE_LTE
         )
 
-        val result = mapper.mapToCarrierAggregationState(listOf(first, second))
+        val result = PhysicalChannelConfigMapper.map(listOf(first, second))
 
-        assertEquals(10_000, result.primaryBandwidthKhz)
+        assertEquals(10_000, result.bandwidthKhz)
         assertEquals(listOf("B3"), result.secondaryBands)
     }
 

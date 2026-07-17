@@ -16,75 +16,47 @@ import org.junit.jupiter.api.Test
 
 class CellInfoMapperTest {
 
-    private val mapper = CellInfoMapper(sdkInt = API_34)
-
     // region LTE
 
     @Test
-    fun mapToServingCell_withRegisteredLteCell_returnsLteDomainModel() {
-        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, bands = intArrayOf(3))
+    fun mapCellInfoLte_withValidReading_returnsCorrectDomainModel() {
+        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bands = intArrayOf(3))
 
-        val result = mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoLte(cellInfo)
 
         assertEquals(
-            ServingCell(cellType = CellType.LTE, band = "B3", rsrp = -95, rsrq = -12, bandwidthKhz = 20_000),
+            PrimaryCellData(cellType = CellType.LTE, band = "B3", rsrp = -95, rsrq = -12),
             result
         )
     }
 
     @Test
-    fun mapToServingCell_withUnavailableLteRsrp_mapsSentinelToNull() {
-        val cellInfo = lteCellInfo(rsrp = CellInfo.UNAVAILABLE, rsrq = -12, bandwidthKhz = 20_000, bands = intArrayOf(3))
+    fun mapCellInfoLte_withMaxIntRsrp_mapsToUnavailableSentinel() {
+        val cellInfo = lteCellInfo(rsrp = Int.MAX_VALUE, rsrq = -12, bands = intArrayOf(3))
 
-        val result = mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoLte(cellInfo)
 
-        assertNull(result?.rsrp)
-        assertEquals(-12, result?.rsrq)
+        assertEquals(CellInfo.UNAVAILABLE, result.rsrp)
+        assertEquals(-12, result.rsrq)
     }
 
     @Test
-    fun mapToServingCell_withUnavailableLteRsrqAndBandwidth_mapsSentinelsToNull() {
-        val cellInfo = lteCellInfo(
-            rsrp = -95,
-            rsrq = CellInfo.UNAVAILABLE,
-            bandwidthKhz = CellInfo.UNAVAILABLE,
-            bands = intArrayOf(3)
-        )
+    fun mapCellInfoLte_withUnavailableRsrq_mapsToUnavailableSentinel() {
+        val cellInfo = lteCellInfo(rsrp = -95, rsrq = CellInfo.UNAVAILABLE, bands = intArrayOf(3))
 
-        val result = mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoLte(cellInfo)
 
-        assertNull(result?.rsrq)
-        assertNull(result?.bandwidthKhz)
-        assertEquals(-95, result?.rsrp)
+        assertEquals(-95, result.rsrp)
+        assertEquals(CellInfo.UNAVAILABLE, result.rsrq)
     }
 
     @Test
-    fun mapToServingCell_onApi29WithKnownEarfcn_derivesBandFromEarfcn() {
-        val api29Mapper = CellInfoMapper(sdkInt = API_29)
-        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, earfcn = 1300)
+    fun mapCellInfoLte_withEmptyBandsArray_returnsUnknownBand() {
+        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bands = intArrayOf())
 
-        val result = api29Mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoLte(cellInfo)
 
-        assertEquals("B3", result?.band)
-    }
-
-    @Test
-    fun mapToServingCell_onApi29WithUnavailableEarfcn_returnsNullBand() {
-        val api29Mapper = CellInfoMapper(sdkInt = API_29)
-        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, earfcn = CellInfo.UNAVAILABLE)
-
-        val result = api29Mapper.mapToServingCell(listOf(cellInfo))
-
-        assertNull(result?.band)
-    }
-
-    @Test
-    fun mapToServingCell_withEmptyLteBandsArray_fallsBackToEarfcn() {
-        val cellInfo = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, bands = intArrayOf(), earfcn = 6300)
-
-        val result = mapper.mapToServingCell(listOf(cellInfo))
-
-        assertEquals("B20", result?.band)
+        assertEquals(CellInfoMapper.BAND_UNKNOWN, result.band)
     }
 
     // endregion
@@ -92,57 +64,78 @@ class CellInfoMapperTest {
     // region NR
 
     @Test
-    fun mapToServingCell_withRegisteredNrCell_returnsNrDomainModel() {
+    fun mapCellInfoNr_withValidReading_returnsCorrectDomainModel() {
         val cellInfo = nrCellInfo(ssRsrp = -100, ssRsrq = -11, bands = intArrayOf(78))
 
-        val result = mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoNr(cellInfo)
 
         assertEquals(
-            ServingCell(cellType = CellType.NR, band = "n78", rsrp = -100, rsrq = -11, bandwidthKhz = null),
+            PrimaryCellData(cellType = CellType.NR, band = "n78", rsrp = -100, rsrq = -11),
             result
         )
     }
 
     @Test
-    fun mapToServingCell_withUnavailableNrSsRsrpAndSsRsrq_mapsSentinelsToNull() {
-        val cellInfo = nrCellInfo(ssRsrp = CellInfo.UNAVAILABLE, ssRsrq = CellInfo.UNAVAILABLE, bands = intArrayOf(78))
+    fun mapCellInfoNr_withMaxIntSsRsrp_mapsToUnavailableSentinel() {
+        val cellInfo = nrCellInfo(ssRsrp = Int.MAX_VALUE, ssRsrq = -11, bands = intArrayOf(78))
 
-        val result = mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoNr(cellInfo)
 
-        assertNull(result?.rsrp)
-        assertNull(result?.rsrq)
+        assertEquals(CellInfo.UNAVAILABLE, result.rsrp)
+        assertEquals(-11, result.rsrq)
     }
 
     @Test
-    fun mapToServingCell_onApi29WithNrCell_returnsNullBand() {
-        val api29Mapper = CellInfoMapper(sdkInt = API_29)
-        val cellInfo = nrCellInfo(ssRsrp = -100, ssRsrq = -11, bands = intArrayOf(78))
+    fun mapCellInfoNr_withUnavailableSsRsrq_mapsToUnavailableSentinel() {
+        val cellInfo = nrCellInfo(ssRsrp = -100, ssRsrq = CellInfo.UNAVAILABLE, bands = intArrayOf(78))
 
-        val result = api29Mapper.mapToServingCell(listOf(cellInfo))
+        val result = CellInfoMapper.mapCellInfoNr(cellInfo)
 
-        assertNull(result?.band)
+        assertEquals(-100, result.rsrp)
+        assertEquals(CellInfo.UNAVAILABLE, result.rsrq)
+    }
+
+    @Test
+    fun mapCellInfoNr_withEmptyBandsArray_returnsUnknownBand() {
+        val cellInfo = nrCellInfo(ssRsrp = -100, ssRsrq = -11, bands = intArrayOf())
+
+        val result = CellInfoMapper.mapCellInfoNr(cellInfo)
+
+        assertEquals(CellInfoMapper.BAND_UNKNOWN, result.band)
     }
 
     // endregion
 
-    // region serving-cell selection
+    // region primary-cell selection
 
     @Test
-    fun mapToServingCell_withNoRegisteredCell_returnsNull() {
-        val unregistered = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, registered = false)
+    fun mapPrimaryCell_withNoRegisteredCell_returnsNull() {
+        val unregistered = lteCellInfo(rsrp = -95, rsrq = -12, bands = intArrayOf(3), registered = false)
 
-        assertNull(mapper.mapToServingCell(listOf(unregistered)))
-        assertNull(mapper.mapToServingCell(emptyList()))
+        assertNull(CellInfoMapper.mapPrimaryCell(listOf(unregistered)))
+        assertNull(CellInfoMapper.mapPrimaryCell(emptyList()))
     }
 
     @Test
-    fun mapToServingCell_withRegisteredLteAndNrCells_prefersNrCell() {
-        val lte = lteCellInfo(rsrp = -95, rsrq = -12, bandwidthKhz = 20_000, bands = intArrayOf(3))
+    fun mapPrimaryCell_withRegisteredLteAndNrCells_prefersNrCell() {
+        val lte = lteCellInfo(rsrp = -95, rsrq = -12, bands = intArrayOf(3))
         val nr = nrCellInfo(ssRsrp = -100, ssRsrq = -11, bands = intArrayOf(78))
 
-        val result = mapper.mapToServingCell(listOf(lte, nr))
+        val result = CellInfoMapper.mapPrimaryCell(listOf(lte, nr))
 
         assertEquals(CellType.NR, result?.cellType)
+    }
+
+    @Test
+    fun mapPrimaryCell_withOnlyRegisteredLteCell_returnsLteDomainModel() {
+        val lte = lteCellInfo(rsrp = -95, rsrq = -12, bands = intArrayOf(3))
+
+        val result = CellInfoMapper.mapPrimaryCell(listOf(lte))
+
+        assertEquals(
+            PrimaryCellData(cellType = CellType.LTE, band = "B3", rsrp = -95, rsrq = -12),
+            result
+        )
     }
 
     // endregion
@@ -150,15 +143,11 @@ class CellInfoMapperTest {
     private fun lteCellInfo(
         rsrp: Int,
         rsrq: Int,
-        bandwidthKhz: Int,
         bands: IntArray = intArrayOf(),
-        earfcn: Int = CellInfo.UNAVAILABLE,
         registered: Boolean = true
     ): CellInfoLte {
         val identity = mockk<CellIdentityLte> {
             every { this@mockk.bands } returns bands
-            every { this@mockk.earfcn } returns earfcn
-            every { bandwidth } returns bandwidthKhz
         }
         val signal = mockk<CellSignalStrengthLte> {
             every { this@mockk.rsrp } returns rsrp
@@ -189,10 +178,5 @@ class CellInfoMapperTest {
             every { cellIdentity } returns identity
             every { cellSignalStrength } returns signal
         }
-    }
-
-    private companion object {
-        const val API_29 = 29
-        const val API_34 = 34
     }
 }
