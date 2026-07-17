@@ -26,34 +26,40 @@ alwaysApply: true
 ## TelephonyCallback, not PhoneStateListener
 
 - All code that observes cellular data (signal strength, service state,
-  data connection state, physical channel config, etc.) MUST use
-  `TelephonyCallback` via `TelephonyManager.registerTelephonyCallback(...)`.
+  data connection state, cell info, etc.) MUST use `TelephonyCallback` via
+  `TelephonyManager.registerTelephonyCallback(...)`.
 - `PhoneStateListener` is deprecated (API 31+) and MUST NOT be used in new
-  or modified code. If you find `PhoneStateListener` usage, migrate it to
-  the equivalent `TelephonyCallback` listener interface
-  (e.g. `TelephonyCallback.PhysicalChannelConfigListener`,
-  `TelephonyCallback.SignalStrengthsListener`, etc.).
+  or modified code. Prefer `TelephonyCallback.CellInfoListener` (and related
+  non-privileged listeners). Do **not** use
+  `TelephonyCallback.PhysicalChannelConfigListener` in this app —
+  it requires `READ_PRECISE_PHONE_STATE` or carrier privileges and throws
+  `SecurityException` (`enforceCarrierPrivilege`) for a normal third-party app.
 - Always unregister callbacks (`unregisterTelephonyCallback`) when the
   owning component is destroyed/stopped to avoid leaks.
 
-## PhysicalChannelConfig and Carrier Aggregation
+## CellInfo bandwidth and Carrier Aggregation
 
-- Carrier aggregation MUST be detected via `PhysicalChannelConfig` data
-  delivered through `TelephonyCallback.PhysicalChannelConfigListener`
-  (i.e. `onPhysicalChannelConfigChanged(List<PhysicalChannelConfig>)`).
-- Carrier aggregation is active when more than one `PhysicalChannelConfig`
-  entry is present for the connected cell.
-- Raw `PhysicalChannelConfig` data MUST be mapped into the domain model
-  `CarrierAggregationState` before it is exposed outside the data layer.
-  Do not let `PhysicalChannelConfig` (an Android framework type) leak into
-  `domain/` or `ui/` layers.
+- Bandwidth MUST come from `CellIdentityLte.getBandwidth()` (kHz) for LTE.
+  Public `CellIdentityNr` has no bandwidth API on compileSdk 35 — report
+  [CellInfo.UNAVAILABLE] for NR until a privileged/alternative source exists.
+  Do not use `PhysicalChannelConfig` for bandwidth.
+- Carrier aggregation MUST be detected from `CellInfo.getCellConnectionStatus()`:
+  count cells with `CONNECTION_PRIMARY_SERVING` or
+  `CONNECTION_SECONDARY_SERVING`; CA is active when that count is greater
+  than one. Secondary band labels come from cells with
+  `CONNECTION_SECONDARY_SERVING` only.
+- Prefer an immediate `TelephonyManager.requestCellInfoUpdate(...)` after
+  registering `CellInfoListener` to seed the first snapshot.
+- Map raw `CellInfo` into the domain model `CellSnapshot` before exposing
+  data outside the data layer. Do not let framework telephony types leak
+  into `domain/` or `ui/` layers.
 
 ## Package Conventions
 
 - `data/telephony` — TelephonyManager/TelephonyCallback wrappers, permission
-  checks, and mapping from Android framework types (e.g.
-  `PhysicalChannelConfig`) into domain models.
-- `domain/model` — plain Kotlin domain models such as
-  `CarrierAggregationState`, decoupled from Android telephony APIs.
+  checks, and mapping from Android framework types (e.g. `CellInfo`) into
+  domain models.
+- `domain/model` — plain Kotlin domain models such as `CellSnapshot`,
+  decoupled from Android telephony APIs.
 - `ui/screens` — Compose screens/state that consume domain models only,
   never framework telephony types directly.

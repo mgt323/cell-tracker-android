@@ -11,7 +11,7 @@ This project's tech stack (do not change without explicit request):
 - DI: Hilt
 - Database: Room
 - Async: Kotlin Coroutines + Flow (not RxJava, not callbacks)
-- Telephony: `TelephonyCallback` (API 31+), `PhysicalChannelConfig`
+- Telephony: `TelephonyCallback` (API 31+), `CellInfo` (bandwidth + CA; not privileged `PhysicalChannelConfig`)
 - Background processing: WorkManager + foreground service (type "location")
 - Testing: JUnit5 + MockK + Turbine (for Flow)
 - minSdk 29, compileSdk 35, targetSdk 35

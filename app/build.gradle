@@ -13,11 +13,11 @@ hilt {
 }
 
 android {
-    namespace 'com.ferhatozcelik.jetpackcomposetemplate'
+    namespace 'com.mgt323.celltracker'
     compileSdk appCompileSdkVersion
 
     defaultConfig {
-        applicationId "com.ferhatozcelik.jetpackcomposetemplate"
+        applicationId "com.mgt323.celltracker"
         minSdk appMinSdkVersion
         targetSdk appTargetSdkVersion
         versionCode 1
